@@ -21,27 +21,40 @@ from ldm.models.diffusion.ddim import DDIMSampler
 
 class ControlledUnetModel(UNetModel):
     def forward(self, x, timesteps=None, context=None, control=None, only_mid_control=False, **kwargs):
+        print(f'ctlunet- x: {x}, timesteps: {timesteps}, context: {context}, control: {control}')
         hs = []
         with torch.no_grad():
             t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
+            print(f'ctlunet- t_emb.shape: {t_emb.shape}')
             emb = self.time_embed(t_emb)
+            print(f'ctlunet- emb.shape: {emb.shape}')
+            print(f'ctlunet before type assign- x.type: {x.type} self.dtype: {self.dtype} h.type: {h.dtype}')
             h = x.type(self.dtype)
+            print(f'ctlunet after type assign- x.type: {x.type} self.dtype: {self.dtype} h.type: {h.dtype}')
             for module in self.input_blocks:
+                print(f'ctlunet- module from self.input_blocks: {module}')
                 h = module(h, emb, context)
+                print(f'ctlunet- h.shape: {h.shape}')
                 hs.append(h)
             h = self.middle_block(h, emb, context)
-
+            print(f'ctlunet- after middle_block h.shape: {h.shape}')
         if control is not None:
             h += control.pop()
+            print(f'ctlunet- control after control.pop() : {control} & h.shape: {h.shape}')
 
         for i, module in enumerate(self.output_blocks):
+            print(f'ctlunet- module from self.output_blocks: {module}')
             if only_mid_control or control is None:
                 h = torch.cat([h, hs.pop()], dim=1)
+                print(f'ctlunet- ctl none after torch.cat len(hs): {len(hs)} & h.shape: {h.shape}')
             else:
                 h = torch.cat([h, hs.pop() + control.pop()], dim=1)
+                print(f'ctlunet- control after torch.cat : {control} len(hs): {len(hs)} & h.shape: {h.shape}')
             h = module(h, emb, context)
+            print(f'ctlunet- self.output_blocks loop h.shape: {h.shape}')
 
         h = h.type(x.dtype)
+        print(f'ctlunet- self.out(h) : {self.out(h).shape} h.dtype : {h.dtype}')
         return self.out(h)
 
 
