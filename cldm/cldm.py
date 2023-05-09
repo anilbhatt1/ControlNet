@@ -28,13 +28,13 @@ class ControlledUnetModel(UNetModel):
             print(f'ctlunet- t_emb.shape: {t_emb.shape}')
             emb = self.time_embed(t_emb)
             print(f'ctlunet- emb.shape: {emb.shape}')
-            print(f'ctlunet before type assign- x.type: {x.type} self.dtype: {self.dtype} h.type: {h.dtype}')
+            print(f'ctlunet before type assign- x.type: {x.type} self.dtype: {self.dtype}')
             h = x.type(self.dtype)
             print(f'ctlunet after type assign- x.type: {x.type} self.dtype: {self.dtype} h.type: {h.dtype}')
-            for module in self.input_blocks:
-                print(f'ctlunet- module from self.input_blocks: {module}')
+            for loop_idx, module in enumerate(self.input_blocks):
+                print(f'ctlunet- module {loop_idx} from self.input_blocks: {module}')
                 h = module(h, emb, context)
-                print(f'ctlunet- h.shape: {h.shape}')
+                print(f'ctlunet- loop {loop_idx} h.shape: {h.shape}')
                 hs.append(h)
             h = self.middle_block(h, emb, context)
             print(f'ctlunet- after middle_block h.shape: {h.shape}')
@@ -43,15 +43,15 @@ class ControlledUnetModel(UNetModel):
             print(f'ctlunet- control after control.pop() : {control} & h.shape: {h.shape}')
 
         for i, module in enumerate(self.output_blocks):
-            print(f'ctlunet- module from self.output_blocks: {module}')
+            print(f'ctlunet- module {i} from self.output_blocks: {module}')
             if only_mid_control or control is None:
                 h = torch.cat([h, hs.pop()], dim=1)
-                print(f'ctlunet- ctl none after torch.cat len(hs): {len(hs)} & h.shape: {h.shape}')
+                print(f'ctlunet- ctl {i} none after torch.cat len(hs): {len(hs)} & h.shape: {h.shape}')
             else:
                 h = torch.cat([h, hs.pop() + control.pop()], dim=1)
-                print(f'ctlunet- control after torch.cat : {control} len(hs): {len(hs)} & h.shape: {h.shape}')
+                print(f'ctlunet- control {i} after torch.cat : {control} len(hs): {len(hs)} & h.shape: {h.shape}')
             h = module(h, emb, context)
-            print(f'ctlunet- self.output_blocks loop h.shape: {h.shape}')
+            print(f'ctlunet- self.output_blocks {i} loop h.shape: {h.shape}')
 
         h = h.type(x.dtype)
         print(f'ctlunet- self.out(h) : {self.out(h).shape} h.dtype : {h.dtype}')
@@ -310,8 +310,9 @@ class ControlNet(nn.Module):
         h = x.type(self.dtype)
         print(f'ctlnet- self.input_blocks: {self.input_blocks}')
         print(f'ctlnet- self.zero_convs: {self.zero_convs}')
+        loop_idx = 0
         for module, zero_conv in zip(self.input_blocks, self.zero_convs):
-            print(f'ctlnet- loop module: {module}, zero_conv: {zero_conv}')
+            print(f'ctlnet- loop module {loop_idx}: {module}, zero_conv: {zero_conv}')
             if guided_hint is not None:                
                 h = module(h, emb, context)
                 print(f'ctlnet- loop with guided_hint after module h.shape : {h.shape}')
@@ -320,15 +321,16 @@ class ControlNet(nn.Module):
                 guided_hint = None
             else:
                 h = module(h, emb, context)
-                print(f'ctlnet- loop without guided_hint after module h.shape : {h.shape}')
+                print(f'ctlnet- loop {loop_idx} without guided_hint after module h.shape : {h.shape}')
             outs.append(zero_conv(h, emb, context))
-            print(f'ctlnet- loop outs: {outs}')
+            print(f'ctlnet- loop {loop_idx} outs: {len(outs)}, outs[-1].shape : {outs[-1].shape}')
+            loop_idx += 1
         
         print(f'ctlnet- self.middle_block: {self.middle_block}')
         h = self.middle_block(h, emb, context)
         print(f'ctlnet- after self.middle_block h.shape: {h.shape}')
         outs.append(self.middle_block_out(h, emb, context))
-        print(f'ctlnet- after append self.middle_block outs: {outs}')
+        print(f'ctlnet- after append self.middle_block outs: {len(outs)}, outs[-1].shape : {outs[-1].shape}')
         
         return outs
 
