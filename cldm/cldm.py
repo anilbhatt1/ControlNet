@@ -21,7 +21,7 @@ from ldm.models.diffusion.ddim import DDIMSampler
 
 class ControlledUnetModel(UNetModel):
     def forward(self, x, timesteps=None, context=None, control=None, only_mid_control=False, **kwargs):
-        print(f'ctlunet- x: {x}, timesteps: {timesteps}, context: {context}, control: {control}')
+        print(f'ctlunet- x: {x.shape}, timesteps: {timesteps}, context: {context}, control: {control}')
         hs = []
         with torch.no_grad():
             t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
@@ -295,26 +295,41 @@ class ControlNet(nn.Module):
         return TimestepEmbedSequential(zero_module(conv_nd(self.dims, channels, channels, 1, padding=0)))
 
     def forward(self, x, hint, timesteps, context, **kwargs):
+        print(f'ctlnet- x: {x.shape}, hint: {hint}, timesteps: {timesteps}, context: {context}')
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
+        print(f'ctlnet- t_emb.shape: {t_emb.shape}')
         emb = self.time_embed(t_emb)
+        print(f'ctlnet- emb.shape: {emb.shape}')
 
         guided_hint = self.input_hint_block(hint, emb, context)
+        print(f'ctlnet- self.input_hint_block: {self.input_hint_block}')
+        print(f'ctlnet- guided_hint.shape: {guided_hint.shape}')
 
         outs = []
 
         h = x.type(self.dtype)
+        print(f'ctlnet- self.input_blocks: {self.input_blocks}')
+        print(f'ctlnet- self.zero_convs: {self.zero_convs}')
         for module, zero_conv in zip(self.input_blocks, self.zero_convs):
-            if guided_hint is not None:
+            print(f'ctlnet- loop module: {module}, zero_conv: {zero_conv}')
+            if guided_hint is not None:                
                 h = module(h, emb, context)
+                print(f'ctlnet- loop with guided_hint after module h.shape : {h.shape}')
                 h += guided_hint
+                print(f'ctlnet- loop with guided_hint after += h.shape : {h.shape}')
                 guided_hint = None
             else:
                 h = module(h, emb, context)
+                print(f'ctlnet- loop without guided_hint after module h.shape : {h.shape}')
             outs.append(zero_conv(h, emb, context))
-
+            print(f'ctlnet- loop outs: {outs}')
+        
+        print(f'ctlnet- self.middle_block: {self.middle_block}')
         h = self.middle_block(h, emb, context)
+        print(f'ctlnet- after self.middle_block h.shape: {h.shape}')
         outs.append(self.middle_block_out(h, emb, context))
-
+        print(f'ctlnet- after append self.middle_block outs: {outs}')
+        
         return outs
 
 
